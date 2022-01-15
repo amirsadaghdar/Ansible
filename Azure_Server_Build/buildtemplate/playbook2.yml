@@ -1,130 +1,30 @@
 ---
-- name: Build OS
-  hosts: localhost
-  gather_facts: false
-  vars_files:
-    - hostvars34.yml
-  tasks:
-    - name: Create a virtual machine from a template
-      community.vmware.vmware_guest:
-        validate_certs: no
-        hostname: "{{ hostname }}"
-        username: "{{ username }}"
-        password: "{{ password }}"
-        datacenter: "{{ datacenter }}"
-        cluster: "{{ cluster }}"
-        resource_pool: "{{ resource_pool }}"
-        folder: "{{ folder }}"
-        name: "{{ vmname }}"
-        state: poweredon
-        template: "{{ template }}"
-        disk:
-        - size_gb: "{{ disk1 }}"
-          type: thick
-          datastore: "{{ datastore }}"
-        hardware:
-          memory_mb: "{{ memory_mb }}"
-          num_cpus: "{{ num_cpus }}"
-          num_cpu_cores_per_socket: 2
-          scsi: paravirtual
-          version: "11"
-          boot_firmware: "efi"
-        networks:
-        - name: "{{ vlan }}"
-          device_type: vmxnet3
-          connected: yes
-          start_connected: yes
-          type: static
-          ip: "{{ ip }}"
-          netmask: "{{ netmask }}"
-          gateway: "{{ gateway }}"
-          domain: corp.com
-          dns_servers: 
-          - "{{ dns_servers[0] }}"
-          - "{{ dns_servers[1] }}"
-        wait_for_ip_address: True
-        customization:
-          hostname: "{{ vmname }}"
-          orgname: "IT"
-          dns_servers: 
-          - "{{ dns_servers[0] }}"
-          - "{{ dns_servers[1] }}"
-          joindomain: corp.com
-          domain: corp.com
-          domainadmin: "{{ domainadmin }}"
-          domainadminpassword: "{{ domainadminpassword }}"
-          password: "password!"
-      delegate_to: localhost
-      register: deploy
-    - name: Sleep for 900 seconds and continue with play
-      wait_for:
-        timeout: 900
-      delegate_to: localhost
-    - name: Get Virtual Machine info - UUID
-      vmware_guest_info:
-        validate_certs: no
-        hostname: "{{ hostname }}"
-        username: "{{ username }}"
-        password: "{{ password }}"
-        datacenter: "{{ datacenter }}"
-        name: "{{ vmname }}"
-        schema: "vsphere"
-        properties:
-      delegate_to: localhost
-      register: vminfo
-    - debug:
-        var: vminfo.instance.config.uuid
-    - name: Add Disk to VM UUID
-      community.vmware.vmware_guest_disk:
-        validate_certs: no
-        hostname: "{{ hostname }}"
-        username: "{{ username }}"
-        password: "{{ password }}"
-        datacenter: "{{ datacenter }}"
-        uuid: "{{ vminfo.instance.config.uuid }}"
-        disk:
-          - size_gb: "{{ disk2 }}"
-            type: thick
-            datastore: "{{ datastore }}"
-            state: present
-            scsi_controller: 0
-            unit_number: 1
-            scsi_type: 'lsilogicsas'
-      delegate_to: localhost
-      register: disk_facts
-    - name: Reboot the VM UUID
-      vmware_guest_powerstate:
-        validate_certs: no
-        hostname: "{{ hostname }}"
-        username: "{{ username }}"
-        password: "{{ password }}"
-        folder: "{{ folder }}"
-        name: "{{ vmname }}"
-        state: reboot-guest
-      delegate_to: localhost
-      register: disk_facts
-    - name: Sleep for 60 seconds and continue with play
-      wait_for:
-        timeout: 60
-      delegate_to: localhost
-- name: Setup the OS
+- name: Configure the OS
   hosts: all
   gather_facts: false
-  vars_files:
-    - host34.yml
   tasks:
+    - name: Join to the domain
+      ansible.windows.win_domain_membership:
+        dns_domain_name: corp.com
+        domain_admin_user: -service-lansweeper@corp.com
+        domain_admin_password: password
+        domain_ou_path: "OU=win_servers,OU=Org,DC=corp,DC=com"
+        state: domain
+      register: domain_state 
+    - ansible.windows.win_reboot:
+      when: domain_state.reboot_required
     - name: Initialize a disk with an MBR partition style
       community.windows.win_initialize_disk:
-        disk_number: 1
+        disk_number: 2
         style: mbr
     - name: Create a partition with drive letter D
       community.windows.win_partition:
-        drive_letter: D
+        drive_letter: F
         partition_size: -1
-        disk_number: 1
+        disk_number: 2
     - name: Format the newly created partition as NTFS and label it
       community.windows.win_format:
-        drive_letter: D
+        drive_letter: F
         file_system: NTFS
         new_label: Data
         full: True

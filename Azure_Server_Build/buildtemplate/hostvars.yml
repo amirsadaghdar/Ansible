@@ -1,0 +1,17 @@
+---
+nic: nic_name
+resource_group: resource_group_name
+virtual_network: virtual_network_name
+virtual_network_resource_group: virtual_network_rg_name
+subnet: subnet_name
+security_group: security_group_name
+vm_size: vm_size_name
+name: server_name
+location: location_name
+sku: sku_name
+boot_diagnostics_resource_group: boot_diagnostics_rg_name
+boot_diagnostics_storage_account: boot_diagnostics_storage_account_name
+tag_name: tag_name_name
+tag_application: tag_application_name
+tag_owner: tag_owner_name
+tag_costcenter: tag_costcenter_name

@@ -1,0 +1,93 @@
+---
+- name: Create Azure Virtual Machine
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - hostvars1.yml
+  collections:
+    - azure.azcollection
+  tasks:
+    - name: Create a network card for the Virtual Machine
+      azure_rm_networkinterface:
+        name: "{{ nic }}"
+        resource_group: "{{ resource_group }}"
+        virtual_network:
+          name: "{{ virtual_network }}"
+          resource_group: "{{ virtual_network_resource_group }}"
+        subnet_name: "{{ subnet }}"
+        security_group:
+          name: "{{ security_group }}"
+          resource_group: "{{ virtual_network_resource_group }}"
+        ip_configurations:
+          - name: nic1_ip
+            primary: yes
+            private_ip_allocation_method: Dynamic
+        tags:
+          Name: "{{ tag_name }}"
+          Application: "{{ tag_application }}"
+          Owner: "{{ tag_owner }}"
+          CostCenter: "{{ tag_costcenter }}"
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Create VM with defaults
+      azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        vm_size: "{{ vm_size }}"
+        name: "{{ name }}"
+        location: "{{ location }}"
+        os_type: Windows
+        admin_username: SysAdmin
+        admin_password: passwprd
+        image:
+          offer: WindowsServer
+          publisher: MicrosoftWindowsServer
+          sku: "{{ sku }}"
+          version: latest
+        public_ip_allocation_method: Disabled
+        zones: 1
+        managed_disk_type: Premium_LRS
+        os_disk_size_gb: 127
+        data_disks:
+          - lun: 0
+            disk_size_gb: 150
+            managed_disk_type: Premium_LRS
+        virtual_network_resource_group: "{{ virtual_network_resource_group }}"
+        virtual_network_name: "{{ virtual_network }}"
+        subnet_name: "{{ subnet }}"
+        network_interface_names: "{{ nic }}"
+        boot_diagnostics:
+          enabled: yes
+          resource_group: "{{ boot_diagnostics_resource_group }}"
+          storage_account: "{{ boot_diagnostics_storage_account }}"
+        tags:
+          Name: "{{ tag_name }}"
+          Application: "{{ tag_application }}"
+          Owner: "{{ tag_owner }}"
+          CostCenter: "{{ tag_costcenter }}"
+    - name: Get facts for one network interface
+      azure_rm_networkinterface_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nic }}"
+      delegate_to: localhost
+      register: nicinfo
+    - debug:
+        var: "{{ nicinfo.networkinterfaces.0.ip_configurations.0.private_ip_address }}"
+    - name: Replace the IP Address in the Host File
+      lineinfile:
+        path: host25.yml
+        search_string: '    server_ipaddr'
+        line: "{{ '    ' + nicinfo.networkinterfaces.0.ip_configurations.0.private_ip_address }}"
+    - name: Create VM script extension to enable HTTPS WinRM listener
+      azure_rm_virtualmachineextension:
+        name: winrm-extension
+        resource_group: "{{ resource_group }}"
+        virtual_machine_name: "{{ name }}"
+        publisher: Microsoft.Compute
+        virtual_machine_extension_type: CustomScriptExtension
+        type_handler_version: '1.9'
+        settings: '{"fileUris": ["http://<website ip to download the .ps1 file>/aspnet_client/ConfigureRemotingForAnsible.ps1"],"commandToExecute": "powershell -ExecutionPolicy Unrestricted -File ConfigureRemotingForAnsible.ps1 -EnableCredSSP"}'
+        auto_upgrade_minor_version: true
+
