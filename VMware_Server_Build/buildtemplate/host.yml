@@ -1,0 +1,22 @@
+---
+all:
+  hosts:
+    server_name
+  vars:
+    ansible_user: svc_ansible@CORP.COM
+    ansible_password: !vault |
+              $ANSIBLE_VAULT;1.2;AES256;server_build
+              36626234306335613133336432663239313339396464336332623237336263373565623734333930
+              6539373831303065643664316662656362663862643331350a646565373536353566363739626238
+              30326165626435303039303263303932333732393630663965373235646334316438636333343164
+              3933646531653031640a373461303561633636613663343361626466386134376130643366393166
+              63613636303238666239386339616664373535623931663139626534396234366138
+    ansible_connection: winrm
+    ansible_port: 5986
+    ansible_winrm_scheme: https
+    ansible_winrm_transport: kerberos
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_message_encryption: auto
+    week1: week01
+    week2: week02
+    week3: week03

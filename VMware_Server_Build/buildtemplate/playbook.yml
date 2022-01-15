@@ -1,0 +1,246 @@
+---
+- name: Build OS
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - hostvars34.yml
+  tasks:
+    - name: Create a virtual machine from a template
+      community.vmware.vmware_guest:
+        validate_certs: no
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        datacenter: "{{ datacenter }}"
+        cluster: "{{ cluster }}"
+        resource_pool: "{{ resource_pool }}"
+        folder: "{{ folder }}"
+        name: "{{ vmname }}"
+        state: poweredon
+        template: "{{ template }}"
+        disk:
+        - size_gb: "{{ disk1 }}"
+          type: thick
+          datastore: "{{ datastore }}"
+        hardware:
+          memory_mb: "{{ memory_mb }}"
+          num_cpus: "{{ num_cpus }}"
+          num_cpu_cores_per_socket: 2
+          scsi: paravirtual
+          version: "11"
+          boot_firmware: "efi"
+        networks:
+        - name: "{{ vlan }}"
+          device_type: vmxnet3
+          connected: yes
+          start_connected: yes
+          type: static
+          ip: "{{ ip }}"
+          netmask: "{{ netmask }}"
+          gateway: "{{ gateway }}"
+          domain: corp.com
+          dns_servers: 
+          - "{{ dns_servers[0] }}"
+          - "{{ dns_servers[1] }}"
+        wait_for_ip_address: True
+        customization:
+          hostname: "{{ vmname }}"
+          orgname: "Marex IT"
+          dns_servers: 
+          - "{{ dns_servers[0] }}"
+          - "{{ dns_servers[1] }}"
+          joindomain: corp.com
+          domain: corp.com
+          domainadmin: "{{ domainadmin }}"
+          domainadminpassword: "{{ domainadminpassword }}"
+          password: "Welcome155!"
+      delegate_to: localhost
+      register: deploy
+    - name: Sleep for 900 seconds and continue with play
+      wait_for:
+        timeout: 900
+      delegate_to: localhost
+    - name: Get Virtual Machine info - UUID
+      vmware_guest_info:
+        validate_certs: no
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        datacenter: "{{ datacenter }}"
+        name: "{{ vmname }}"
+        schema: "vsphere"
+        properties:
+      delegate_to: localhost
+      register: vminfo
+    - debug:
+        var: vminfo.instance.config.uuid
+    - name: Add Disk to VM UUID
+      community.vmware.vmware_guest_disk:
+        validate_certs: no
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        datacenter: "{{ datacenter }}"
+        uuid: "{{ vminfo.instance.config.uuid }}"
+        disk:
+          - size_gb: "{{ disk2 }}"
+            type: thick
+            datastore: "{{ datastore }}"
+            state: present
+            scsi_controller: 0
+            unit_number: 1
+            scsi_type: 'lsilogicsas'
+      delegate_to: localhost
+      register: disk_facts
+    - name: Reboot the VM UUID
+      vmware_guest_powerstate:
+        validate_certs: no
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        folder: "{{ folder }}"
+        name: "{{ vmname }}"
+        state: reboot-guest
+      delegate_to: localhost
+      register: disk_facts
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+- name: Setup the OS
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - host34.yml
+  tasks:
+    - name: Initialize a disk with an MBR partition style
+      community.windows.win_initialize_disk:
+        disk_number: 1
+        style: mbr
+    - name: Create a partition with drive letter D
+      community.windows.win_partition:
+        drive_letter: D
+        partition_size: -1
+        disk_number: 1
+    - name: Format the newly created partition as NTFS and label it
+      community.windows.win_format:
+        drive_letter: D
+        file_system: NTFS
+        new_label: Data
+        full: True
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Copy Folder - All Apps
+      win_copy:
+        src: /etc/ansible/apps
+        dest: C:\Support\
+    - name: Copy Folder - Symantec Week1
+      win_copy:
+        src: /etc/ansible/apps2/Symantec/Week1/setup.exe
+        dest: C:\Support\apps\setup.exe
+      when: week1
+    - name: Copy Folder - Symantec Week2
+      win_copy:
+        src: /etc/ansible/apps2/Symantec/Week2/setup.exe
+        dest: C:\Support\apps\setup.exe
+      when: week2
+    - name: Copy Folder - Symantec Week3
+      win_copy:
+        src: /etc/ansible/apps2/Symantec/Week3/setup.exe
+        dest: C:\Support\apps\setup.exe
+      when: week3
+    - name: Install LAPS
+      win_package:
+        path: C:\Support\apps\LAPS\LAPS.x64.msi
+        state: present
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Check if Splunk is installed
+      ansible.windows.win_stat:
+        path: 'c:\Program Files\SplunkUniversalForwarder'
+      register: stat_file
+    - name: Install Splunk
+      ansible.builtin.win_command: C:\Support\apps\SplunkForwarder8.1.3\SilentInstall64.bat
+      when: stat_file.stat.exists == False
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Check if CrowdStrike is installed
+      ansible.windows.win_stat:
+        path: 'c:\Program Files\CrowdStrike'
+      register: stat_file
+    - name: Install CrowdStrike
+      ansible.builtin.win_command: C:\Support\apps\Crowdstrike\install_crowdstrike.bat
+      when: stat_file.stat.exists == False
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Check if Rapid7 is installed
+      ansible.windows.win_stat:
+        path: 'c:\Program Files\Rapid7'
+      register: stat_file
+    - name: Install Rapid7
+      ansible.builtin.win_command: C:\Support\apps\Rapid7\ansible_install.bat
+      when: stat_file.stat.exists == False
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Check if DesktopCentral is installed
+      ansible.windows.win_stat:
+        path: 'c:\Program Files (x86)\DesktopCentral_Agent'
+      register: stat_file
+    - name: Install DesktopCentral
+      ansible.builtin.win_command: C:\Support\apps\DesktopCentral\ansible_install.bat
+      when: stat_file.stat.exists == False
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Install Symantec
+      win_package:
+        path: C:\Support\apps\setup.exe
+        product_id: Symantec
+        state: present
+      ignore_errors: yes
+    - name: Sleep for 300 seconds and continue with play
+      wait_for:
+        timeout: 300
+      delegate_to: localhost
+    - name: Delete Folder
+      ansible.windows.win_file:
+        path: C:\Support\apps
+        state: absent
+      ignore_errors: yes
+    - name: Set autologon for abc.com\user1
+      community.windows.win_auto_logon:
+        logon_count: 1
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Reboot the machine
+      ansible.windows.win_reboot:
+        reboot_timeout: 3600
+        post_reboot_delay: 60
+    - name: Sleep for 60 seconds and continue with play
+      wait_for:
+        timeout: 60
+      delegate_to: localhost
+    - name: Install all security, critical, and rollup updates without a scheduled task
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+        reboot: yes
+        reboot_timeout: 3600
+        ignore_errors: yes
